@@ -43,8 +43,7 @@ def santa(rev, line, context, filename):
     print cmd
     result = envoy.run(cmd).std_out.split('\n')
 
-    # print result[line - 1]
-    m = re.match(r"^\s*(\d+):\s+(\d+):.*$", result[line - 1])
+    m = re.match(r"^\s*(\d+):\s*(\d+):.*$", result[line - 1])
     original_rev, original_line = m.group(1), int(m.group(2))
 
     if context > 0:
@@ -71,6 +70,7 @@ def santa(rev, line, context, filename):
     r = envoy.run(cmd)
     patch = r.std_out
 
+    # todo this can be pretty horrible when the hunk is large.
     print_hunk(patch, line)
 
     cmd = "hg parent -r %s" % rev
