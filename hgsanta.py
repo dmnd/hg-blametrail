@@ -19,9 +19,9 @@ def print_hunk(patch, line):
             lines_from = (int(m.group(1)), int(m.group(2)))
             lines_to = (int(m.group(3)), int(m.group(4)))
 
-            if line >= lines_to[0] and line <= lines_to:
+            if line >= lines_to[0] and line <= lines_to[0] + lines_to[1]:
                 in_hunk = True
-                minwidth = len(str(lines_to[1]))
+                minwidth = len(str(max(lines_to[0], lines_to[0] + lines_to[1])))
                 print l
                 line_no = lines_from[0]
         elif in_hunk and l:
