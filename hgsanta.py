@@ -169,34 +169,46 @@ class changeset_printer(object):
 
     def diff(self, diffopts, node1, node2, match, changes=None):
         in_hunk = False
-        line = self.line
+        in_diffline = False
         print_next_blank = True
 
         for chunk, label in patch.diffui(self.repo, node1, node2, match,
                                          changes, diffopts):
-            if label == 'diff.hunk':
-                if in_hunk:
-                    in_hunk = False
+            if label == 'diff.diffline':
+                in_diffline = True
+                self.ui.pushbuffer()
+                self.ui.write(chunk, label=label)
+            elif label == 'diff.hunk':
+                in_diffline = False
+                in_hunk = False
 
                 m = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@$", chunk)
                 lines_from = (int(m.group(1)), int(m.group(2)))
                 lines_to = (int(m.group(3)), int(m.group(4)))
 
-                if lines_to[0] <= line <= lines_to[0] + lines_to[1]:
+                diffline = self.ui.popbuffer(labeled=True)
+                if lines_to[0] <= self.line <= lines_to[0] + lines_to[1]:
                     in_hunk = True
+
+                    # this is an interesting hunk: print the diffline
+                    self.ui.write(diffline)
+
                     minwidth = len(str(max(lines_to[0], lines_to[0] + lines_to[1])))
                     self.ui.write(chunk, label=label)
                     line_no = lines_from[0]
-
+                else:
+                    # uninteresting, so discard the diffline
+                    diffline = None
+            elif in_diffline:
+                self.ui.write(chunk, label=label)
             elif in_hunk:
-
                 # make sure any newlines came after some valid stuff
                 if chunk == '\n':
                     if print_next_blank:
                         print_next_blank = False
                         self.ui.write(chunk, label=label)
                     else:
-                        print "chunk: %r, label: %r" % (chunk, label)
+                        print "ignored blank chunk: %r, label: %r" % (chunk, label)
                     continue
 
                 if label == 'diff.inserted':
