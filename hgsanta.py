@@ -1,196 +1,15 @@
 # -*- coding: utf8 -*-
 import re
-import envoy
-
-import argparse
-
-
-def print_hunk(patch, line):
-    in_hunk = False
-    minwidth = -1
-    for l in patch.split('\n'):
-        # todo make this work with the rest of the diff format:
-        # http://www.gnu.org/software/diffutils/manual/html_node/Detailed-Unified.html#Detailed-Unified
-        m = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@$", l)
-        if m:
-            if in_hunk:
-                in_hunk = False
-
-            lines_from = (int(m.group(1)), int(m.group(2)))
-            lines_to = (int(m.group(3)), int(m.group(4)))
-
-            if line >= lines_to[0] and line <= lines_to[0] + lines_to[1]:
-                in_hunk = True
-                minwidth = len(str(max(lines_to[0], lines_to[0] + lines_to[1])))
-                print l
-                line_no = lines_from[0]
-        elif in_hunk and l:
-            if l[0] == '+':
-                print minwidth * ' ',
-            if l[0] != '+':
-                fmt = '%' + str(minwidth) + 'i'
-                print fmt % line_no,
-                line_no += 1
-            print l
-
-
-def santa(rev, line, context, filename):
-
-    original_rev = None
-    original_line = None
-
-    cmd = "hg blame -ln %s -r %s" % (filename, rev)
-    print cmd
-    result = envoy.run(cmd).std_out.split('\n')
-
-    m = re.match(r"^\s*(\d+):\s*(\d+):.*$", result[line - 1])
-    original_rev, original_line = m.group(1), int(m.group(2))
-
-    if context > 0:
-        line_s = line - 1 - context
-        line_e = line - 1 + context + 1
-        display = result[line_s:line_e]
-
-        print "lines %i±%i:" % (line, context)
-
-        for l in display:
-            print l
-
-        print
-
-    rev = original_rev
-    line = original_line
-
-    cmd = "hg log -r %s -f %s -p" % (rev, filename)
-    print cmd
-
-    # print the summary
-    print envoy.run("hg log -r %s -f %s" % (rev, filename)).std_out
-
-    r = envoy.run(cmd)
-    patch = r.std_out
-
-    # todo this can be pretty horrible when the hunk is large.
-    print_hunk(patch, line)
-
-    cmd = "hg parent -r %s" % rev
-    parent = envoy.run(cmd).std_out.split('\n')[0]
-    m = re.match("^changeset:\s+(\d+):(\w+)$", parent)
-    parent = int(m.group(1))
-
-    print "parent is %s" % parent
-    rev = parent
-    line = raw_input("Enter line number for next iteration, or hit enter to exit: ")
-    if line:
-        line = int(line)
-        print
-        print
-
-        # recurse until we overflow the stack or run out of history :)
-        santa(rev, line, context, filename)
-
-
-def main():
-    parser = argparse.ArgumentParser(description='omniscient blame')
-    parser.add_argument('--rev', default='tip', type=str, help='revision to start from')
-    parser.add_argument('--context', default=0, type=int)
-    args = parser.parse_args()
-
-    santa(args.rev, args.line, args.context, args.file)
-
 
 import mercurial.extensions
 import mercurial.commands
-
 from mercurial.node import hex, short
+from mercurial import cmdutil, nullrev
 from mercurial import scmutil, patch, util, encoding
 
 
 def _(s):
     return s
-
-
-def real_annotate(ui, repo, *pats, **opts):
-    """show changeset information by line for each file
-
-    List changes in files, showing the revision id responsible for
-    each line
-
-    This command is useful for discovering when a change was made and
-    by whom.
-
-    Without the -a/--text option, annotate will avoid processing files
-    it detects as binary. With -a, annotate will annotate the file
-    anyway, although the results will probably be neither useful
-    nor desirable.
-
-    Returns 0 on success.
-    """
-    if opts.get('follow'):
-        # --follow is deprecated and now just an alias for -f/--file
-        # to mimic the behavior of Mercurial before version 1.5
-        opts['file'] = True
-
-    datefunc = ui.quiet and util.shortdate or util.datestr
-    getdate = util.cachefunc(lambda x: datefunc(x[0].date()))
-
-    if not pats:
-        raise util.Abort(_('at least one filename or pattern is required'))
-
-    hexfn = ui.debugflag and hex or short
-
-    opmap = [('user', ' ', lambda x: ui.shortuser(x[0].user())),
-             ('number', ' ', lambda x: str(x[0].rev())),
-             ('changeset', ' ', lambda x: hexfn(x[0].node())),
-             ('date', ' ', getdate),
-             ('file', ' ', lambda x: x[0].path()),
-             ('line_number', ':', lambda x: str(x[1])),
-            ]
-
-    if (not opts.get('user') and not opts.get('changeset')
-        and not opts.get('date') and not opts.get('file')):
-        opts['number'] = True
-
-    linenumber = opts.get('line_number') is not None
-    if linenumber and (not opts.get('changeset')) and (not opts.get('number')):
-        raise util.Abort(_('at least one of -n/-c is required for -l'))
-
-    funcmap = [(func, sep) for op, sep, func in opmap if opts.get(op)]
-    funcmap[0] = (funcmap[0][0], '')  # no separator in front of first column
-
-    def bad(x, y):
-        raise util.Abort("%s: %s" % (x, y))
-
-    ctx = scmutil.revsingle(repo, opts.get('rev'))
-    m = scmutil.match(ctx, pats, opts)
-    m.bad = bad
-    follow = not opts.get('no_follow')
-    diffopts = patch.diffopts(ui, opts, section='annotate')
-    for abs in ctx.walk(m):
-        fctx = ctx[abs]
-
-        if not opts.get('text') and util.binary(fctx.data()):
-            ui.write(_("%s: binary file\n") % ((pats and m.rel(abs)) or abs))
-            continue
-
-        lines = fctx.annotate(follow=follow, linenumber=linenumber,
-                              diffopts=diffopts)
-        pieces = []
-
-        for f, sep in funcmap:
-            l = [f(n) for n, dummy in lines]
-            if l:
-                sized = [(x, encoding.colwidth(x)) for x in l]
-                ml = max([w for x, w in sized])
-                pieces.append(["%s%s%s" % (sep, ' ' * (ml - w), x)
-                               for x, w in sized])
-
-        if pieces:
-            for p, l in zip(zip(*pieces), lines):
-                ui.write("%s: %s" % ("".join(p), l[1]))
-
-            if lines and not lines[-1][1].endswith('\n'):
-                ui.write('\n')
 
 
 def blame_trail(origfn, ui, repo, *pats, **opts):
@@ -279,26 +98,116 @@ def blame_trail(origfn, ui, repo, *pats, **opts):
     mercurial.commands.log(ui, repo, *pats, rev=[rev], follow=True, date=None)
 
     # now look at just the hunk with this line
-    show_hunk(ui, repo, *pats, patch=True, rev=[rev], follow=True, date=None)
+    show_hunk(ui, repo, *pats, patch=True, rev=[rev], follow=True, date=None, line=line)
 
-    # cmd = "hg parent -r %s" % rev
-    # parent = envoy.run(cmd).std_out.split('\n')[0]
-    # m = re.match("^changeset:\s+(\d+):(\w+)$", parent)
-    # parent = int(m.group(1))
+    ctx = scmutil.revsingle(repo, rev)
+    parents = ctx.parents()
+    assert len(parents) == 1
+    parent = parents[0]
 
-    # print "parent is %s" % parent
-    # rev = parent
-    # line = raw_input("Enter line number for next iteration, or hit enter to exit: ")
-    # if line:
-    #     line = int(line)
-    #     print
-    #     print
+    ui.write("parent is %s\n" % parent)
 
-    #     # recurse until we overflow the stack or run out of history :)
-    #     santa(rev, line, context, filename)
+    line = ui.prompt("Line number for next iteration", None)
+    if line:
+        opts['trail'] = int(line)
+        opts['rev'] = str(parent)
+
+        # recurse until we overflow the stack or run out of history :)
+        # santa(parent, line, context, filename)
+        blame_trail(origfn, ui, repo, *pats, **opts)
 
 
-from mercurial import cmdutil, templatekw, nullrev
+class changeset_printer(object):
+    '''show changeset information when templating not requested.'''
+
+    def __init__(self, ui, repo, patch, diffopts, buffered, line):
+        self.ui = ui
+        self.repo = repo
+        self.buffered = buffered
+        self.patch = patch
+        self.diffopts = diffopts
+        self.header = {}
+        self.hunk = {}
+        self.lastheader = None
+        self.footer = None
+        self.line = line
+
+    def flush(self, rev):
+        # if rev in self.header:
+        #     h = self.header[rev]
+        #     if h != self.lastheader:
+        #         self.lastheader = h
+        #         self.ui.write(h)
+        #     del self.header[rev]
+        if rev in self.hunk:
+            self.ui.write(self.hunk[rev])
+            del self.hunk[rev]
+            return 1
+        return 0
+
+    def close(self):
+        if self.footer:
+            self.ui.write(self.footer)
+
+    def show(self, ctx, copies=None, matchfn=None, **props):
+        if self.buffered:
+            self.ui.pushbuffer()
+            self._show(ctx, copies, matchfn, props)
+            self.hunk[ctx.rev()] = self.ui.popbuffer(labeled=True)
+        else:
+            self._show(ctx, copies, matchfn, props)
+
+    def _show(self, ctx, copies, matchfn, props):
+        if not matchfn:
+            matchfn = self.patch
+
+        node = ctx.node()
+        diffopts = patch.diffopts(self.ui, self.diffopts)
+        prev = self.repo.changelog.parents(node)[0]
+        self.diff(diffopts, prev, node, match=matchfn)
+        self.ui.write("\n")
+
+    def diff(self, diffopts, node1, node2, match, changes=None):
+        in_hunk = False
+        line = self.line
+        print_next_blank = True
+
+        for chunk, label in patch.diffui(self.repo, node1, node2, match,
+                                         changes, diffopts):
+            if label == 'diff.hunk':
+                if in_hunk:
+                    in_hunk = False
+
+                m = re.match(r"^@@ -(\d+),(\d+) \+(\d+),(\d+) @@$", chunk)
+                lines_from = (int(m.group(1)), int(m.group(2)))
+                lines_to = (int(m.group(3)), int(m.group(4)))
+
+                if lines_to[0] <= line <= lines_to[0] + lines_to[1]:
+                    in_hunk = True
+                    minwidth = len(str(max(lines_to[0], lines_to[0] + lines_to[1])))
+                    self.ui.write(chunk, label=label)
+                    line_no = lines_from[0]
+
+            elif in_hunk:
+
+                # make sure any newlines came after some valid stuff
+                if chunk == '\n':
+                    if print_next_blank:
+                        print_next_blank = False
+                        self.ui.write(chunk, label=label)
+                    else:
+                        print "chunk: %r, label: %r" % (chunk, label)
+                    continue
+
+                if label == 'diff.inserted':
+                    self.ui.write(minwidth * ' ')
+                else:
+                    fmt = '%' + str(minwidth) + 'i'
+                    self.ui.write(fmt % line_no)
+                    line_no += 1
+
+                self.ui.write(chunk, label=label)
+                print_next_blank = True
 
 
 def show_hunk(ui, repo, *pats, **opts):
@@ -319,7 +228,11 @@ def show_hunk(ui, repo, *pats, **opts):
     branches = opts.get('branch', []) + opts.get('only_branch', [])
     opts['branch'] = [repo.lookupbranch(b) for b in branches]
 
-    displayer = cmdutil.show_changeset(ui, repo, opts, True)
+    patch = scmutil.matchall(repo)
+
+    line = opts['line']
+
+    displayer = changeset_printer(ui, repo, patch, opts, False, line)
 
     def prep(ctx, fns):
         rev = ctx.rev()
@@ -378,6 +291,7 @@ def show_hunk(ui, repo, *pats, **opts):
         if displayer.flush(ctx.rev()):
             count += 1
     displayer.close()
+
 
 def uisetup(ui):
     entry = mercurial.extensions.wrapcommand(mercurial.commands.table, 'annotate',
