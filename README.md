@@ -1,7 +1,8 @@
 Mercurial Blame Trail
 =====================
 
-An interactive mode for hg blame that helps you trace when a particular line was introduced - not just when it was last edited.
+An interactive mode for `hg blame` that helps you trace when a particular line
+was introduced - not just when it was last edited.
 
 Essentially it automates this process:
 
@@ -18,6 +19,13 @@ Essentially it automates this process:
 
 Usage
 -----
+
+This extension adds a couple of options to `hg blame`:
+
+  * `--trail` which should be given a line number, and activates the
+    interactive mode
+  * '--context' the number of lines to display before and after the line being
+    traced
 
     $ hg blame --trail 116 some/file.py --context=2
 
