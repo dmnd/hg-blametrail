@@ -86,8 +86,8 @@ def blame_trail(origfn, ui, repo, *pats, **opts):
 
         print "lines %i±%i:" % (trail_line, context)
 
-        for l in display_lines:
-            print "%s: %s: %s" % (l[0][0].rev(), l[0][1], l[1]),
+        for ((l, lineno), line) in display_lines:
+            print "%s: %s: %s" % (l.rev(), lineno, line),
 
         print
 
@@ -103,7 +103,7 @@ def blame_trail(origfn, ui, repo, *pats, **opts):
     ctx = scmutil.revsingle(repo, rev)
     parents = ctx.parents()
     assert len(parents) == 1
-    parent = parents[0]
+    parent = parents[0].rev()
 
     ui.write("parent is %s\n" % parent)
 
@@ -170,15 +170,18 @@ class changeset_printer(object):
     def diff(self, diffopts, node1, node2, match, changes=None):
         in_hunk = False
         in_diffline = False
-        print_next_blank = True
+        just_saw_newline = False
 
         for chunk, label in patch.diffui(self.repo, node1, node2, match,
                                          changes, diffopts):
             if label == 'diff.diffline':
+                # we only print the diffline after checking that the hunk is
+                # interesting, so push the buffer
                 in_diffline = True
                 self.ui.pushbuffer()
                 self.ui.write(chunk, label=label)
             elif label == 'diff.hunk':
+                # once we get to a hunk, determine if it is interesting
                 in_diffline = False
                 in_hunk = False
 
@@ -186,40 +189,47 @@ class changeset_printer(object):
                 lines_from = (int(m.group(1)), int(m.group(2)))
                 lines_to = (int(m.group(3)), int(m.group(4)))
 
-                diffline = self.ui.popbuffer(labeled=True)
-                if lines_to[0] <= self.line <= lines_to[0] + lines_to[1]:
-                    in_hunk = True
+                try:
+                    diffline = self.ui.popbuffer(labeled=True)
+                except:
+                    pass
 
-                    # this is an interesting hunk: print the diffline
-                    self.ui.write(diffline)
+                if lines_to[0] <= self.line <= lines_to[0] + lines_to[1]:
+                    # this is an interesting hunk!
+                    in_hunk = True
+                    just_saw_newline = False
+
+                    # print the diffline if this is the first good hunk for this file
+                    if diffline:
+                        self.ui.write(diffline)
+                        diffline = None
 
                     minwidth = len(str(max(lines_to[0], lines_to[0] + lines_to[1])))
                     self.ui.write(chunk, label=label)
                     line_no = lines_from[0]
-                else:
-                    # uninteresting, so discard the diffline
-                    diffline = None
+
             elif in_diffline:
                 self.ui.write(chunk, label=label)
             elif in_hunk:
-                # make sure any newlines came after some valid stuff
-                if chunk == '\n':
-                    if print_next_blank:
-                        print_next_blank = False
-                        self.ui.write(chunk, label=label)
+                if just_saw_newline:
+                    # start a new line
+                    just_saw_newline = False
+                    if label == 'diff.deleted':
+                        fmt = '%' + str(minwidth) + 'i'
+                        self.ui.write(fmt % line_no)
+                        line_no += 1
+                    elif label == 'diff.inserted':
+                        self.ui.write(minwidth * ' ')
                     else:
-                        print "ignored blank chunk: %r, label: %r" % (chunk, label)
-                    continue
-
-                if label == 'diff.inserted':
-                    self.ui.write(minwidth * ' ')
+                        fmt = '%' + str(minwidth) + 'i'
+                        self.ui.write(fmt % line_no)
+                        line_no += 1
+                    self.ui.write(chunk, label=label)
                 else:
-                    fmt = '%' + str(minwidth) + 'i'
-                    self.ui.write(fmt % line_no)
-                    line_no += 1
-
-                self.ui.write(chunk, label=label)
-                print_next_blank = True
+                    # print whatever until we get to the end of the line
+                    self.ui.write(chunk, label=label)
+                    if chunk == '\n':
+                        just_saw_newline = True
 
 
 def show_hunk(ui, repo, *pats, **opts):
