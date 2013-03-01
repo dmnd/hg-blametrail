@@ -24,10 +24,13 @@ This extension adds a couple of options to `hg blame`:
 
   * `--trail` which should be given a line number, and activates the
     interactive mode
-  * '--context' the number of lines to display before and after the line being
+  * `--context` the number of lines to display before and after the line being
     traced
 
+Example of tracing line 116 of a file, with a context of 2:
+
     $ hg blame --trail 116 some/file.py --context=2
+
 
 Install
 -------
