@@ -320,6 +320,6 @@ def uisetup(ui):
         blame_trail)
     extra_opts = [
         ('t', 'trail', -1, ("know who's been naughty or nice")),
-        ('c', 'context', 0, ("how much context to show around hunks"))
+        ('C', 'context', 0, ("how much context to show around hunks"))
     ]
     entry[1].extend(extra_opts)
