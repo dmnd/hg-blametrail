@@ -17,6 +17,11 @@ def blame_trail(origfn, ui, repo, *pats, **opts):
     if trail_line == -1:
         return origfn(ui, repo, *pats, **opts)
 
+    if not ui.interactive():
+        raise util.Abort(_("blame trail must be used in interactive mode.\n"
+            "If you're using the pager extension, use --pager off or create"
+            " a non paged alias for blametrail."))
+
     # have to use line_number for trail
     opts['line_number'] = True
 
