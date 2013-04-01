@@ -176,6 +176,7 @@ class changeset_printer(object):
         in_hunk = False
         in_diffline = False
         just_saw_newline = False
+        print_lines_to = False
 
         for chunk, label in patch.diffui(self.repo, node1, node2, match,
                                          changes, diffopts):
@@ -211,7 +212,8 @@ class changeset_printer(object):
 
                     minwidth = len(str(max(lines_to[0], lines_to[0] + lines_to[1])))
                     self.ui.write(chunk, label=label)
-                    line_no = lines_from[0]
+                    line_no_from = lines_from[0]
+                    line_no_to = lines_to[0]
 
             elif in_diffline:
                 self.ui.write(chunk, label=label)
@@ -219,16 +221,23 @@ class changeset_printer(object):
                 if just_saw_newline:
                     # start a new line
                     just_saw_newline = False
+                    fmt = '%' + str(minwidth) + 'i'
                     if label == 'diff.deleted':
-                        fmt = '%' + str(minwidth) + 'i'
-                        self.ui.write(fmt % line_no)
-                        line_no += 1
+                        self.ui.write(fmt % line_no_from)
+                        line_no_from += 1
                     elif label == 'diff.inserted':
-                        self.ui.write(minwidth * ' ')
+                        if line_no_to == self.line:
+                            self.ui.write((minwidth - 1) * '=' + '>',
+                                label='blametrail.currentline')
+                        elif print_lines_to:
+                            self.ui.write(fmt % line_no_to)
+                        else:
+                            self.ui.write(minwidth * ' ')
+                        line_no_to += 1
                     else:
-                        fmt = '%' + str(minwidth) + 'i'
-                        self.ui.write(fmt % line_no)
-                        line_no += 1
+                        self.ui.write(fmt % line_no_from)
+                        line_no_from += 1
+                        line_no_to += 1
                     self.ui.write(chunk, label=label)
                 else:
                     # print whatever until we get to the end of the line
