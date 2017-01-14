@@ -199,6 +199,7 @@ class changeset_printer(object):
                 try:
                     diffline = self.ui.popbuffer(labeled=True)
                 except:
+                    diffline = None
                     pass
 
                 if lines_to[0] <= self.line <= lines_to[0] + lines_to[1]:
