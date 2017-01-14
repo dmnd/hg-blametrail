@@ -7,6 +7,7 @@ from mercurial.node import hex, short
 from mercurial import cmdutil, nullrev
 from mercurial import scmutil, patch, util, encoding
 
+testedwith = '4.0'
 
 def _(s):
     return s
