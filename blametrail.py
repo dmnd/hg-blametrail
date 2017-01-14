@@ -196,11 +196,7 @@ class changeset_printer(object):
                 lines_from = (int(m.group(1)), int(m.group(2)))
                 lines_to = (int(m.group(3)), int(m.group(4)))
 
-                try:
-                    diffline = self.ui.popbuffer(labeled=True)
-                except:
-                    diffline = None
-                    pass
+                diffline = self.ui.popbuffer()
 
                 if lines_to[0] <= self.line <= lines_to[0] + lines_to[1]:
                     # this is an interesting hunk!
