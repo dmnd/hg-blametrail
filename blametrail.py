@@ -96,7 +96,7 @@ def blame_trail(origfn, ui, repo, *pats, **opts):
 
         print
 
-    rev = original_rev
+    rev = str(original_rev)
     line = original_line
 
     # print the summary of the diff
