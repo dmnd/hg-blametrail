@@ -7,6 +7,7 @@ from mercurial.node import hex, short
 from mercurial import cmdutil, nullrev
 from mercurial import scmutil, patch, util, encoding
 
+testedwith = '4.0'
 
 def _(s):
     return s
@@ -96,7 +97,7 @@ def blame_trail(origfn, ui, repo, *pats, **opts):
 
         print
 
-    rev = original_rev
+    rev = str(original_rev)
     line = original_line
 
     # print the summary of the diff
@@ -196,9 +197,9 @@ class changeset_printer(object):
                 lines_to = (int(m.group(3)), int(m.group(4)))
 
                 try:
-                    diffline = self.ui.popbuffer(labeled=True)
-                except:
-                    pass
+                    diffline = self.ui.popbuffer()
+                except IndexError:
+                    diffline = None
 
                 if lines_to[0] <= self.line <= lines_to[0] + lines_to[1]:
                     # this is an interesting hunk!
